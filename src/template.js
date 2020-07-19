@@ -135,6 +135,24 @@ function _generateCharaFilterFunc(state, locale="en") {
 
 module.exports._generateCharaFilterFunc = _generateCharaFilterFunc;
 
+/**
+ * @param {object} state
+ * @param {string} locale
+ * @return {function}
+ */
+function _generatePresetFilterFunc(state, locale="en") {
+    const {
+        filterElement,
+        filterText
+    } = state;
+
+    return ([key, val]) => (
+        (filterElement == "all" || val[Object.keys(val)[0]].profile.element == filterElement) &&
+        (filterText == "" || Object.keys(val)[0].toLowerCase().indexOf(filterText.toLowerCase()) != -1));
+}
+
+module.exports._generatePresetFilterFunc = _generatePresetFilterFunc;
+
 
 var RegisteredChara = CreateClass({
     getInitialState: function () {
@@ -729,6 +747,101 @@ var RegisteredArm = CreateClass({
     },
 });
 
+var RegisteredPreset = CreateClass({
+    getInitialState: function () {
+        return {
+            filterText: "",
+            filterElement: "all",
+            presetData: {}
+        };
+    },
+    onDataRequested: function () {
+        return new Promise(resolve => {
+            $.ajax({
+                url: "./presetData.json",
+                dataType: 'json',
+                cache: false,
+                timeout: 10000,
+                success: function (data) {
+                    resolve(data);
+                }.bind(this),
+                error: function (xhr, status, err) {
+                    alert("Error!: プリセットデータの取得に失敗しました。\nstatus: " + status + "\nerror message: " + err.toString());
+                    console.log("xhr:", xhr);
+                    console.log("status:", status);
+                    console.log("error: ", err);
+                    throw new Error(err.toString());
+                }.bind(this)
+            });
+        });
+    },
+    onDataObtained: async function (callback) {
+        this.onDataRequested().then(callback);
+    },
+    componentDidMount: function () {
+        this.onDataObtained((presetData) => {
+            this.setState({presetData: presetData});
+        });
+    },
+    clickedTemplate: function (e) {
+        console.log(e.target.getAttribute("id"))
+        this.props.onClick(this.state.presetData[e.target.getAttribute("id")]);
+    },
+    handleEvent: function (key, e) {
+        this.setState({[key]: e.target.value});
+    },
+    render: function () {
+        const locale = this.props.locale;
+        const clickedTemplate = this.clickedTemplate;
+        const {
+            filterText,
+            presetData
+        } = this.state;
+
+        const presetTemplateHeader = <>
+            <span>検索:</span>
+            <FormControl type="text" placeholder={intl.translate("キャラ名", locale)} value={this.state.filterText}
+                         onChange={this.handleEvent.bind(this, "filterText")}/>
+            <FormControl componentClass="select" value={this.state.filterElement}
+                         onChange={this.handleEvent.bind(this, "filterElement")}>{selector[locale].filterElements}</FormControl>
+        </>;
+
+        const filterFunc = _generatePresetFilterFunc(this.state, locale);
+
+        const mapFunc = ([key,val]) =>
+            <div className="onepreset" key={key}>
+                {GlobalConst.getElementColorPreset(key, Object.keys(val)[0], val[Object.keys(val)[0]].profile.element, locale, clickedTemplate)}
+            </div>;
+
+        const sortFunc = (a,b) => {
+            return Object.keys(a[1]).toString().localeCompare(Object.keys(b[1]).toString());
+        };
+
+        const result = Object.entries(presetData).filter(filterFunc).sort(sortFunc);
+
+        if (_ua.Mobile || _ua.Tablet) {
+            return (
+                <div className="loadoutTemplate">
+                    {presetTemplateHeader}
+                    <div className="loadoutTemplateContent">
+                        {result.map(mapFunc)}
+                    </div>
+                </div>
+            )
+        } else {
+            return (
+                <div className="loadoutTemplate">
+                    {presetTemplateHeader}
+                    <div className="loadoutTemplateContent">
+                        {result.map(mapFunc)}
+                    </div>
+                </div>
+            )
+        }
+    },
+});
+
 
 module.exports.RegisteredChara = RegisteredChara;
 module.exports.RegisteredArm = RegisteredArm;
+module.exports.RegisteredPreset = RegisteredPreset;

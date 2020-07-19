@@ -8,6 +8,7 @@ var {SummonList, Summon} = require('./summon.js');
 var {CharaList, Chara} = require('./chara.js');
 var {ArmList, Arm} = require('./armlist.js');
 var {AdsenseAdvertisement} = require('./advertisement.js');
+var {RegisteredPreset} = require('./template.js');
 var GlobalConst = require('./global_const.js');
 var Notice = require('./notice.js');
 var {ResultList, Result} = require('./result.js');
@@ -510,6 +511,7 @@ var Sys = CreateClass({
             selectedData: '',
             uploadedData: '',
             rawData: '',
+            openPresets: false
         };
     },
     componentDidMount: function () {
@@ -606,6 +608,20 @@ var Sys = CreateClass({
         var saveString = Base64.encodeURI(JSON.stringify(storedData));
         localStorage.setItem("data", saveString);
     },
+    closePresets: function () {
+        this.setState({openPresets: false})
+    },
+    openPresets: function () {
+        this.setState({openPresets: true})
+    },
+    addPreset: function (preset) {
+        this.setState({storedData: preset});
+        this.setState({selectedData: Object.keys(preset)[0]});
+
+        // save data
+        var saveString = Base64.encodeURI(JSON.stringify(preset));
+        localStorage.setItem("data", saveString);
+    },
     render: function () {
         var locale = this.props.locale;
         var datalist = [];
@@ -658,6 +674,16 @@ var Sys = CreateClass({
                             null
                         }
                     </ButtonGroup>
+                    <Button tye="tweet" bsStyle="primary"
+                            onClick={this.openPresets}>{intl.translate("プリセットをロード", locale)}</Button>
+                    <Modal show={this.state.openPresets} onHide={this.closePresets}>
+                        <Modal.Header closeButton>
+                            <Modal.Title>Presets</Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                            <RegisteredPreset onClick={this.addPreset} locale={this.props.locale}/>
+                        </Modal.Body>
+                    </Modal>
                 </FormGroup>
             </div>
         );

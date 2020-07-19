@@ -67,6 +67,24 @@ module.exports.getElementColorLabel = (function (element, locale) {
     return <span className="label label-danger">{intl.translate("火", locale)}</span>
 });
 
+// Return the label of the color corresponding to the attribute
+module.exports.getElementColorPreset = (function (id, label, element, locale, callback) {
+    if (element == "fire") {
+        return <p style={{ color: '#d9534f' }} onClick={callback} id={id}><span className="label label-danger">{intl.translate("火", locale)}</span> {label}</p>
+    } else if (element == "water") {
+        return <p style={{ color: '#337ab7' }} onClick={callback} id={id}><span className="label label-primary">{intl.translate("水", locale)}</span> {label}</p>
+    } else if (element == "earth") {
+        return <p style={{ color: '#f0ad4e' }} onClick={callback} id={id}><span className="label label-warning">{intl.translate("土", locale)}</span> {label}</p>
+    } else if (element == "wind") {
+        return <p style={{ color: '#5cb85c' }} onClick={callback} id={id}><span className="label label-success">{intl.translate("風", locale)}</span> {label}</p>
+    } else if (element == "light") {
+        return <p style={{ color: 'palegoldenrod' }} onClick={callback} id={id}><span className="label label-light">{intl.translate("光", locale)}</span> {label}</p>
+    } else if (element == "dark") {
+        return <p style={{ color: 'black' }} onClick={callback} id={id}><span className="label label-dark">{intl.translate("闇", locale)}</span> {label}</p>
+    }
+    return <p onClick={callback} id={id}><span className="label label-non">{intl.translate("無（技巧あり）", locale)}</span>{label}</p>
+});
+
 
 module.exports._ua = (function (u) {
     return {

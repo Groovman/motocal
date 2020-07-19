@@ -2104,6 +2104,11 @@ var multiLangData = {
         "ja": "サーバに保存\n(短縮URLを取得)",
         "zh": "保存到服务器",
     },
+    "プリセットをロード": {
+        "en": "Load Preset",
+        "ja": "プリセットをロード",
+        "zh": "プリセットをロード",
+    },
     // For constant conversion
     "人間": {
         "en": "Human",
