@@ -24,6 +24,7 @@ const {
 } = require('./global_const.js');
 const supplemental = require('./supplemental.js');
 const {
+    _contains,
     favContains,
     bahaRaceContains,
     bahaRaceCharaContains,
@@ -34,6 +35,7 @@ const {
 } = require('./skill_filter.js');
 const {range, when} = require('./support_filter');
 const epic = require('./epic');
+const awakening = require('./awakening');
 
 
 module.exports.isCosmos = function (arm) {
@@ -338,13 +340,14 @@ module.exports.calcChainBurst = function (ougiDamage, chainNumber, typeBonus, en
     return damage;
 };
 
-module.exports.calcCriticalArray = function (_normalCritical, _magnaCritical, normalOtherCritical, summon) {
+module.exports.calcCriticalArray = function (_normalCritical, _normalCritical2, _magnaCritical, normalOtherCritical, summon) {
     // Store each occurrence probability
     var probability = [];
     // Store the corresponding magnification
     var damageRatio = [];
     //'ignore' any undefined
     _normalCritical = _normalCritical == undefined ? 0 : _normalCritical;
+    _normalCritical2 = _normalCritical2 == undefined ? 0 : _normalCritical2;
     _magnaCritical = _magnaCritical == undefined ? 0 : _magnaCritical;
     normalOtherCritical = normalOtherCritical.filter((val) => val != undefined);
 
@@ -357,7 +360,7 @@ module.exports.calcCriticalArray = function (_normalCritical, _magnaCritical, no
         damageRatio.push(0.5);
     }
 
-    var normalCritical = 0.01 * _normalCritical * summon["zeus"];
+    var normalCritical = 0.01 * (_normalCritical * summon["zeus"] + _normalCritical2);
     if (normalCritical > 1.0) {
         probability.push(1.0);
         damageRatio.push(0.5);
@@ -478,11 +481,11 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         if (key == "Djeeta") {
             // for Djeeta
             // ATK
-            var summedAttack = totals[key]["baseAttack"];
-            summedAttack += totals[key]["armAttack"];
-            summedAttack += totalSummon["attack"];
-            summedAttack += totals["Djeeta"]["job"].atBonus;
-            summedAttack *= 1.0 + buff["master"];
+            var displayAttack = totals[key]["baseAttack"];
+            displayAttack += totals[key]["armAttack"];
+            displayAttack += totalSummon["attack"];
+            displayAttack += totals["Djeeta"]["job"].atBonus;
+            displayAttack *= 1.0 + buff["master"];
             // HP
             displayHP += totals["Djeeta"]["job"].hpBonus;
             displayHP *= 1.0 + buff["masterHP"];
@@ -491,19 +494,27 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         } else {
             // for character
             // ATK
-            var summedAttack = totals[key]["baseAttack"];
-            summedAttack += totals[key]["armAttack"];
-            summedAttack += totalSummon["attack"];
-            summedAttack += totals[key]["LB"].ATK;
-            summedAttack += totals[key]["EXLB"].ATK;
-            summedAttack += totals[key]["plusBonus"] * 3;
+            var displayAttack = totals[key]["baseAttack"];
+            displayAttack += totals[key]["armAttack"];
+            displayAttack += totalSummon["attack"];
+            displayAttack += totals[key]["LB"].ATK;
+            displayAttack += totals[key]["EXLB"].ATK;
+            displayAttack += awakening.attack(totals[key]["awakeningLv"]);
+            displayAttack += totals[key]["plusBonus"] * 3;
 
             // HP
             displayHP += totals[key]["LB"].HP;
             displayHP += totals[key]["EXLB"].HP;
+            displayHP += awakening.HP(totals[key]["awakeningLv"]);
             displayHP += totals[key]["plusBonus"];
             var totalHP = displayHP * hpCoeff;
         }
+
+        let summedAttack = Math.ceil(displayAttack / 10);
+        // TODO: Add Airship Effect and Crew Skill here.
+        //summedAttack = Math.ceil(summedAttack * (1.0 + Airship Effect));
+        //summedAttack = Math.ceil(summedAttack * (1.0 + Crew Skill));
+        summedAttack *= 10;
 
         if (totals[key]["remainHP"] == 0) {
             totals[key]["remainHP"] = 1.0 / parseFloat(totalHP);
@@ -517,6 +528,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         exCoeff += 0.01 * totals[key]["ex"];
         exCoeff += 0.01 * totals[key]["akashaATK"];
         exCoeff += 0.01 * totals[key]["akashaSensei"];
+        exCoeff += 0.01 * totals[key]["exSensei"];
         exCoeff += totals[key]["dracoATK"]
         var exHaisuiCoeff = 1.0 + 0.01 * totals[key]["exHaisui"];
         var normalCoeff = 1.0 + (0.01 * totals[key]["normal"] + 0.01 * totals[key]["normalSoka"]) * totalSummon["zeus"];
@@ -526,6 +538,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         normalCoeff += totalSummon["chara"];
         normalCoeff += buff["normal"];
         normalCoeff += totals[key]["normalBuff"];
+        normalCoeff += 0.01 * Math.min(18.0, totals[key]["normalAtkCountBonus"])
         // Add pre-emptive to normal attack 先制を通常攻刃へ加算
         normalCoeff += 0.01 * totals[key]["sensei"];
         if (key == "Djeeta") {
@@ -552,10 +565,11 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         elementCoeff += 0.01 * totals[key]["LB"].Element;
 
         // 進境
-        let normalElement = totals[key]["opusnormalElement"] * totalSummon["zeus"];
-        normalElement += totals[key]["opusmagnaElement"] * totalSummon["magna"];
-        normalElement += totals[key]["normalElement"] * totalSummon["zeus"];
-        elementCoeff += Math.min(normalElement, 0.75);
+        let elementProgression = totals[key]["opusnormalElement"] * totalSummon["zeus"];
+        elementProgression += totals[key]["opusmagnaElement"] * totalSummon["magna"];
+        elementProgression += totals[key]["normalElement"] * totalSummon["zeus"];
+        elementProgression += totals[key]["magnaElement"] * totalSummon["magna"];
+        elementCoeff += Math.min(elementProgression, 0.75);
 
         if (key == "Djeeta") {
             elementCoeff += buff["zenithElement"];
@@ -565,6 +579,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         otherCoeff *= 1.0 + buff["other2"];
         otherCoeff *= 1.0 + totals[key]["otherBuff"];
         otherCoeff *= 1.0 + totals[key]["otherBuff2"];
+        otherCoeff *= 1.0 + totals[key]["otherBuffBoostBuff"];
         // Category of "Shield of Eternal Splendor". (総べ称号枠)
         var otherEternal = 1.0 + totals[key]["caimOther"];
         if (totals[key]["EXLB"]["WED"]) {
@@ -623,6 +638,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         var totalDA = 0.01 * totals[key]["baseDA"];
         totalDA += 0.01 * totals[key]["LB"]["DA"];
         totalDA += 0.01 * totals[key]["EXLB"]["DA"];
+        totalDA += awakening.DA(totals[key]["awakeningLv"]);
         totalDA += buff["da"];
         totalDA += totals[key]["DASupport"];
         totalDA += totals[key]["DABuff"];
@@ -648,6 +664,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         var totalTA = 0.01 * totals[key]["baseTA"];
         totalTA += 0.01 * totals[key]["LB"]["TA"];
         totalTA += 0.01 * totals[key]["EXLB"]["TA"];
+        totalTA += awakening.TA(totals[key]["awakeningLv"]);
         totalTA += buff["ta"];
         totalTA += totals[key]["TASupport"];
         totalTA += totals[key]["TABuff"];
@@ -694,7 +711,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
                 buff["criticalBuff"]
              );
 
-            criticalArray = module.exports.calcCriticalArray(totals[key]["normalCritical"], totals[key]["magnaCritical"], normalOtherCriticalArray, totalSummon);
+            criticalArray = module.exports.calcCriticalArray(totals[key]["normalCritical"], totals[key]["normalCritical2"], totals[key]["magnaCritical"], normalOtherCriticalArray, totalSummon);
             criticalRatio = module.exports.calcCriticalRatio(criticalArray);
         }
 
@@ -787,13 +804,14 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
         // Save only the coefficient part (100% + delta of delta) for common processing
 
         var ougiDamageByCosmosAT = Math.min(20, totals[key]["cosmosAT"]);
-        var ougiDamageByNormal = Math.min(100, totals[key]["normalOugiDamage"] * totalSummon["zeus"]);
+        var ougiDamageByNormal = Math.min(100, totals[key]["normalOugiDamage"] * totalSummon["zeus"] + totals[key]["normalOtherOugiDamage"]);
         var ougiDamageByMagna = Math.min(100, totals[key]["magnaOugiDamage"] * totalSummon["magna"]);
         var ougiDamageSkill = 0.01 * (ougiDamageByCosmosAT + ougiDamageByMagna + ougiDamageByNormal);
 
         var ougiDamageExceptSkill = totals[key]["ougiDamageBuff"] + totalSummon["ougiDamage"] + buff['ougiDamage'];
         ougiDamageExceptSkill += 0.01 * totals[key]["LB"]["OugiDamage"];
         ougiDamageExceptSkill += 0.01 * totals[key]["EXLB"]["OugiDamage"];
+        ougiDamageExceptSkill += awakening.ougi(totals[key]["awakeningLv"]);
 
         if (key == "Djeeta") {
             ougiDamageExceptSkill += buff["zenithOugiDamage"];
@@ -883,6 +901,17 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
                 type: "other",
             };
         }
+        console.log(totalSummon["supplementalDamage"])
+        if (totalSummon["supplementalDamage"] > 0) {
+            let value = totalSummon["supplementalDamage"];
+            supplementalDamageArray["召喚石"] = {
+                damage: value,
+                damageWithoutCritical: value,
+                ougiDamage: value * (1.0 + damageUP),
+                chainBurst: value,
+                type: "other",
+            };
+        }
         if (totals[key]["supplementalThirdHit"].length > 0) {
             for (let key2 in totals[key]["supplementalThirdHit"]) {
                 let value = Math.ceil(taRate * totals[key]["supplementalThirdHit"][key2].value * (1.0 - enemyResistance));
@@ -893,6 +922,85 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
                 };
             }
         }
+
+        if(totals[key]["keenBuff"]) {
+            let value = Math.ceil(critRate * 50000 * (1.0 - enemyResistance));
+            supplementalDamageArray["鋭いバフ"] = {
+                damage: value,
+                damageWithoutCritical: 0,
+                ougiDamage: value * (1.0 + damageUP),
+                chainBurst: 0,
+                type: "on_critical",
+                extraValue: (100 * critRate).toFixed(2),
+            }
+        }
+
+        if (totals[key]["supplementalDamageBuffOnCritical"].length > 0) {
+            for (let i = 0; i < totals[key]["supplementalDamageBuffOnCritical"].length ; i++) {
+                let current = totals[key]["supplementalDamageBuffOnCritical"][i];
+                if (totals[key]["supplementalDamageBuffOnCritical"].slice(i + 1).filter(obj => obj.source == current.source && current.limit <= obj.limit).length > 0) {
+                    continue;
+                }
+                let value = Math.ceil(critRate * current.limit * (1.0 - enemyResistance));
+                supplementalDamageArray[current.source] = {
+                    damage: value,
+                    damageWithoutCritical: 0,
+                    ougiDamage: value * (1.0 + damageUP),
+                    chainBurst: 0,
+                    type: "on_critical",
+                    extraValue: (100 * critRate).toFixed(2),
+                }
+            }
+        }
+
+        if(totals[key]["supplementalDamageBuffOnEmnity"].length > 0) {
+            for (let i = 0; i < totals[key]["supplementalDamageBuffOnEmnity"].length ; i++) {
+                let current = totals[key]["supplementalDamageBuffOnEmnity"][i];
+                if (totals[key]["supplementalDamageBuffOnEmnity"].slice(i + 1).filter(obj => obj.source == current.source && current.coeff <= obj.coeff).length > 0) {
+                    continue;
+                }
+                let value = Math.ceil((current.coeff * (1 - totals[key]["remainHP"]) + current.min) * (1.0 - enemyResistance))
+                supplementalDamageArray[current.source] = {
+                    damage: value,
+                    damageWithoutCritical: value,
+                    ougiDamage: value * (1.0 + damageUP),
+                    chainBurst: value,
+                    type: "other",
+                }
+            }
+        }
+
+        if (totals[key]["supplementalDamageBuffOnOugi"].length > 0) {
+            for (let i = 0; i < totals[key]["supplementalDamageBuffOnOugi"].length ; i++) {
+                let current = totals[key]["supplementalDamageBuffOnOugi"][i];
+                if (totals[key]["supplementalDamageBuffOnOugi"].slice(i + 1).filter(obj => obj.source == current.source && current.limit <= obj.limit).length > 0) {
+                    continue;
+                }
+                let value = Math.ceil(current.limit * (1.0 - enemyResistance));
+                supplementalDamageArray[current.source] = {
+                    damage: 0,
+                    damageWithoutCritical: 0,
+                    ougiDamage: value * (1.0 + damageUP),
+                    chainBurst: 0,
+                    type: "on_ougi",
+                }
+            }
+        }
+
+        if (totals[key]["supplementalDamageBuffOnMulti"].length > 0) {
+            for (let i = 0; i < totals[key]["supplementalDamageBuffOnMulti"].length ; i++) {
+                let current = totals[key]["supplementalDamageBuffOnMulti"][i];
+                if (totals[key]["supplementalDamageBuffOnMulti"].slice(i + 1).filter(obj => obj.source == current.source && current.limit[0] <= obj.limit[0]).length > 0) {
+                    continue;
+                }
+                let value = Math.ceil(daRate * current.limit[0] * (1.0 - enemyResistance)) + Math.ceil(taRate * current.limit[1] * (1.0 - enemyResistance));
+                supplementalDamageArray[current.source] = {
+                    damage: value,
+                    type: "multi_hit",
+                };
+            }
+        }
+
         if (totals[key]['covenant'] === "impervious") {
             let value = Math.ceil(30000 * (1.0 - enemyResistance));
             supplementalDamageArray["不壊の誓約"] = {
@@ -965,6 +1073,23 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
             expectedCycleDamagePerTurn = expectedCycleDamage / (expectedTurn + 1.0);
         }
 
+        var expectedLockoutTimePerTurn;
+        if (expectedTurn === Infinity) {
+            expectedLockoutTimePerTurn = 1.0 + (expectedAttack * 0.35);
+        } else {
+            // Base lockout + (Normal attack lockout * n times)
+            let expectedCycleLockoutTime = expectedTurn * (1.0 + (expectedAttack * 0.35));
+            // Ougi Lockout
+            expectedCycleLockoutTime += 1.0 + 0.35;
+            // Chainburst lockout
+            let chainNumber = Math.min(4, buff["chainNumber"]);
+            if (chainNumber >= 2) {
+                expectedCycleLockoutTime += (chainNumber * 2 + 1.0) / chainNumber;
+            }
+            expectedLockoutTimePerTurn = expectedCycleLockoutTime / (expectedTurn + 1.0);
+        }
+        var expectedCycleDamagePerSecond = expectedCycleDamagePerTurn / expectedLockoutTimePerTurn;
+
         // Display array
         var coeffs = {};
         coeffs["normal"] = normalCoeff;
@@ -1014,9 +1139,13 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
 
         coeffs["accuracyDebuff"] = 1.0 + totals[key]["accuracyDebuff"];
 
+        // lockout information
+        coeffs["lockout"] = expectedLockoutTimePerTurn;
+
         res[key] = {
             totalAttack: Math.ceil(totalAttack),
-            displayAttack: Math.ceil(summedAttack),
+            displayAttack: Math.round(displayAttack),
+            summedAttack: summedAttack,
             totalSkillCoeff: totalSkillCoeff,
             totalHP: Math.round(totalHP),
             displayHP: Math.round(displayHP),
@@ -1036,6 +1165,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
             totalExpected: sougou_kaisuu_gikou,
             skilldata: coeffs,
             expectedOugiGage: expectedOugiGage,
+            expectedLockoutTimePerTurn: expectedLockoutTimePerTurn,
             // Tips and tricks
             damage: damage * expectedAttack,
             // Net damage
@@ -1051,6 +1181,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
             chainBurst: chainBurst,
             expectedTurn: expectedTurn,
             expectedCycleDamagePerTurn: expectedCycleDamagePerTurn,
+            expectedCycleDamagePerSecond: expectedCycleDamagePerSecond,
             exlbHaisui: totals[key]["EXLB"]["Haisui"],
             exlbKonshin: totals[key]["EXLB"]["Konshin"],
             normalDamageLimitValues: normalDamageLimitValues,
@@ -1064,6 +1195,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
     var crit_average = 0.0;
     var totalExpected_average = 0.0;
     var averageCyclePerTurn = 0.0;
+    var averageCyclePerSecond = 0.0;
     var averageChainBurst = 0.0;
     var totalOugiDamage = 0.0;
 
@@ -1074,6 +1206,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
             crit_average += res[key].criticalAttack;
             totalExpected_average += res[key].totalExpected;
             averageCyclePerTurn += res[key].expectedCycleDamagePerTurn;
+            averageCyclePerSecond += res[key].expectedCycleDamagePerSecond;
             averageChainBurst += res[key].chainBurst;
             totalOugiDamage += res[key].ougiDamage;
             cnt += 1.0
@@ -1084,6 +1217,7 @@ module.exports.calcBasedOneSummon = function (summonind, prof, buff, totals) {
     res["Djeeta"]["averageCriticalAttack"] = crit_average / cnt;
     res["Djeeta"]["averageTotalExpected"] = totalExpected_average / cnt;
     res["Djeeta"]["averageCyclePerTurn"] = averageCyclePerTurn / cnt;
+    res["Djeeta"]["averageCyclePerSecond"] = averageCyclePerSecond / cnt;
     res["Djeeta"]["averageChainBurst"] = averageChainBurst / cnt;
     res["Djeeta"]["totalOugiDamage"] = totalOugiDamage;
     res["Djeeta"]["totalOugiDamageWithChain"] = totalOugiDamage + res["Djeeta"]["averageChainBurst"];
@@ -1206,7 +1340,7 @@ module.exports.calcHaisuiValue = function (haisuiType, haisuiAmount, haisuiSLv, 
             } else {
                 baseRate = 30 + 2.5 * ((haisuiSLv - 15) / 5.0)
             }
-        } else {
+        } else if (haisuiAmount == "L") {
             // 大
             if (haisuiSLv < 10) {
                 baseRate = -0.5 + haisuiSLv * 3.0;
@@ -1214,6 +1348,13 @@ module.exports.calcHaisuiValue = function (haisuiType, haisuiAmount, haisuiSLv, 
                 baseRate = 30 + 7.5 * ((haisuiSLv - 10) / 5.0)
             } else {
                 baseRate = 37.5 + 3.0 * ((haisuiSLv - 15) / 5.0)
+            }
+        } else {
+            // LL
+            if (haisuiSLv < 10) {
+                baseRate = -0.5 + haisuiSLv * 4.5;
+            } else {
+                baseRate = 45 + 11.25 * ((haisuiSLv - 10) / 5.0)
             }
         }
         return (baseRate / 3.0) * (2.0 * remainHP * remainHP - 5.0 * remainHP + 3.0)
@@ -1231,13 +1372,21 @@ module.exports.calcHaisuiValue = function (haisuiType, haisuiAmount, haisuiSLv, 
                 } else {
                     return Math.pow(100.0 * remainHP / (65.0 - (15 + (0.4 * (haisuiSLv - 15)))), 2.9) + 2.1;
                 }
-            } else {
+            } else if (haisuiAmount === "L") {
                 // Normal Stamina (L)
                 // ref: http://binarysblog.blog.fc2.com/blog-entry-1.html
                 if (haisuiSLv < 15) {
                     return Math.pow(100.0 * remainHP / (56.4 - haisuiSLv), 2.9) + 2.1;
                 } else {
                     return Math.pow(100.0 * remainHP / (56.4 - (15 + (0.4 * (haisuiSLv - 15)))), 2.9) + 2.1;
+                }
+            } else {
+                // Normal Stamina (LL)
+                if (haisuiSLv < 15) {
+                    // No Data
+                    return Math.pow(100.0 * remainHP / (50.4 - haisuiSLv), 2.9) + 2.1;
+                } else {
+                    return Math.pow(100.0 * remainHP / (50.4 - (15 + (0.4 * (haisuiSLv - 15)))), 2.9) + 2.1;
                 }
             }
         }
@@ -1578,9 +1727,7 @@ module.exports.getTotalBuff = function (prof) {
     totalBuff["zenithDamageLimit"] += zenithDamageLimit[prof.zenithDamageLimitBonus] != undefined ? zenithDamageLimit[prof.zenithDamageLimitBonus] : 0;
     totalBuff["criticalBuff"] = prof.criticalBuff != undefined ? prof.criticalBuff : [];
     totalBuff["supplementalDamageBuff"] += parseInt(prof.supplementalDamageBuff);
-
     totalBuff["retsujitsuNoRakuen"] = prof.retsujitsuNoRakuen;
-
     return totalBuff;
 };
 
@@ -1662,6 +1809,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                 }
                 if (key == "Djeeta") {
                     // for Djeeta
+                    // TODO: Add "Boost to main weapon's ATK when main weapon is a XXX +X%" of Master Bonuses here.
+                    //   e.g. if (arm.isMain && buff["masterMainWPN"]) armSup += buff["masterMainWPN"];
                     if (arm.armType == totals[key]["fav1"] && arm.armType == totals[key]["fav2"]) {
                         armSup += (0.2 + buff["zenith1"] + buff["zenith2"]);
                         hpSup += 0.2
@@ -1733,6 +1882,10 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             totals[key]["cosmosBL"] = comb[i] * 20.0;
                         } else if (skillname == 'cosmosPC' && typeCharaContains("pecu", totals[key])) {
                             totals[key]["cosmosDebuffResistance"] = comb[i] * 20.0;
+                        }
+                    } else if (stype == 'normalAtkCount') {
+                        if (amount == 'fist') {
+                            totals[key]["normalAtkCountBonus"] = Math.max(1.8 * Math.min(10, epic.countFistType(arml, comb)), totals[key]["normalAtkCountBonus"])
                         }
                     } else if (stype == 'cosmosLimit') {
                         // Cosmos Weapons Damage Limit Skill
@@ -1948,6 +2101,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                         if (isHaisuiType(stype)) {
                             // Emnity/Stamina calculation part is another method
                             totals[key][stype] += comb[i] * module.exports.calcHaisuiValue(stype, amount, slv, totals[key]["remainHP"])
+                        } else if (stype == 'normalOther') {
+                            totals[key][stype] += comb[i] * skillAmounts["normal"][amount][slv - 1];
                         } else if (stype == 'normalKamui') {
                             // Kamui is equal in attack power and HP rise
                             totals[key]["normal"] += comb[i] * skillAmounts["normal"][amount][slv - 1];
@@ -1960,7 +2115,7 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             totals[key]["unknown"] += comb[i] * skillAmounts["ex"][amount][slv - 1];
                         } else if (stype == 'unknownHP') {
                             totals[key]["unknownHP"] += comb[i] * skillAmounts["exHP"][amount][slv - 1];
-                        } else if (stype == 'normalCritical') {
+                        } else if (stype == 'normalCritical' || stype == 'normalCritical2') {
                             totals[key][stype] += comb[i] * skillAmounts['critical'][amount][slv - 1];
                         } else if (stype == 'magnaCritical') {
                             totals[key][stype] += comb[i] * skillAmounts['critical'][amount][slv - 1];
@@ -1976,16 +2131,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                         } else if (stype == 'normalKatsumi') {
                             totals[key]["normalNite"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
                             totals[key]["normalCritical"] += comb[i] * skillAmounts['critical'][amount][slv - 1];
-                        } else if (stype == 'normalNite') {
-                            totals[key]["normalNite"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
-                        } else if (stype == 'magnaNite') {
-                            totals[key]["magnaNite"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
-                        } else if (stype == 'exNite') {
-                            totals[key]["exNite"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
-                        } else if (stype == 'normalSante') {
-                            totals[key]["normalSante"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
-                        } else if (stype == 'magnaSante') {
-                            totals[key]["magnaSante"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
+                        } else if (stype == 'normalNite' || stype == 'magnaNite' || stype == 'exNite' || stype == 'normalSante' || stype == 'normalOtherSante' || stype == 'magnaSante') {
+                            totals[key][stype] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
                         } else if (stype == 'magnaKatsumi') {
                             totals[key]["magnaCritical"] += comb[i] * skillAmounts["critical"][amount][slv - 1];
                             totals[key]["magnaNite"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
@@ -2033,6 +2180,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             totals[key]["magnaHP"] += comb[i] * skillAmounts["normalHP"]["S"][slv - 1];
                         } else if (stype == 'normalHiou') {
                             totals[key]["normalOugiDamage"] += comb[i] * skillAmounts["normalHiou"][amount][slv - 1];
+                        } else if (stype == 'normalOtherHiou') {
+                            totals[key]["normalOtherOugiDamage"] += comb[i] * skillAmounts["normalHiou"][amount][slv - 1];
                         } else if (stype == 'normalHissatsu') {
                             totals[key]["normalOugiDamage"] += comb[i] * skillAmounts["normalHiou"][amount][slv - 1];
                             totals[key]["normalOugiDamageLimit"] += 0.01 * comb[i] * skillAmounts["normalOugiDamageLimitHissatsu"][amount][slv - 1];
@@ -2055,8 +2204,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             totals[key]["HPdebuff"] += comb[i] * 0.07;
                             totals[key]["ex"] += comb[i] * skillAmounts["ex"][amount][slv - 1];
                         } else if (stype == 'exATKandHP') {
-                            totals[key]["ex"] += comb[i] * skillAmounts["ex"][amount][slv - 1];
-                            totals[key]["exHP"] += comb[i] * skillAmounts["exHP"][amount][slv - 1];
+                            totals[key]["ex"] += comb[i] * skillAmounts["ex"][amount.split("-")[0]][slv - 1];
+                            totals[key]["exHP"] += comb[i] * skillAmounts["exHP"][amount.split("-")[1]][slv - 1];
                         } else if (stype == 'rankiShikku') {
                             if (index == 1) {
                                 totals[key]["normalLesserSante"] += comb[i] * skillAmounts["multiAttack"][amount][slv - 1];
@@ -2134,6 +2283,11 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             if (skillAmounts[stype][amount][slv - 1] > totals[key]["sensei"]) {
                                 totals[key]["sensei"] = skillAmounts[stype][amount][slv - 1];
                             }
+                        } else if (stype == 'exSensei') {
+                            // Preemptive is effective up to 1, whichever is greater
+                            if (skillAmounts[stype][amount][slv - 1] > totals[key]["exSensei"]) {
+                                totals[key]["exSensei"] = skillAmounts[stype][amount][slv - 1];
+                            }
                         } else if (stype == 'magnaKenbu') {
                             // Only applies to fist prof characters
                             if (favCharaContains(['fist'], totals[key])) {
@@ -2171,6 +2325,14 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                                 turns2max = 0.15 / skillAmounts["elementATK"][amount][slv - 1];
                             }
                             totals[key][stype] += comb[i] * turns2max * skillAmounts["elementATK"][amount][slv - 1];
+                        } else if (stype == 'magnaElement') {
+                            var turns2max;
+                            if (amount == 'M') {
+                                turns2max = 0.10 / skillAmounts["elementATK"][amount][slv - 1];
+                            }
+                            totals[key][stype] += comb[i] * turns2max * skillAmounts["elementATK"][amount][slv - 1];
+                        } else if (stype == 'normalOtherHaisui') {
+                            totals[key][stype] += module.exports.calcHaisuiValue("normalHaisui", amount, slv, totals[key]["remainHP"]);
                         } else if (stype == 'shinTenNoInori') {
                             totals[key][stype] = Math.max(totals[key][stype], amount * arm[skillkey + "Detail"]);
                         } else if (stype == 'echoThirdHit') {
@@ -2179,7 +2341,7 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                             if (key == 'Djeeta') {
                                 totals[key]["superOugiDamage"] += totals[key]["remainHP"] * 2;
                                 if (amount == "II") {
-                                    totals[key]["exceedOugiDamageLimit"] += 0.25;
+                                    totals[key]["exceedOugiDamageLimit"] += 0.30;
                                 }
                             }
                         } else if (stype == 'victorys_promise') {
@@ -2189,8 +2351,8 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                         } else if (stype == 'one_sting_one_kill') {
                             if (key == 'Djeeta') {
                                 totals[key]["normalOtherCritical"].push({
-                                    "value": 0.05,
-                                    "attackRatio": 9.00
+                                    "value": 1.0,
+                                    "attackRatio": 2.0
                                 });
                                 if (amount == "II") {
                                     totals[key]["criticalDamageLimit"] += 0.30;
@@ -2202,7 +2364,7 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                                     "value": 1.0,
                                     "attackRatio": 5.00
                                 });
-                                totals[key]["accuracyDebuff"] += 0.50;
+                                totals[key]["accuracyDebuff"] += 0.20;
                                 if (amount == "II") {
                                     totals[key]["criticalDamageLimit"] += 0.30;
                                 }
@@ -2223,6 +2385,17 @@ module.exports.addSkilldataToTotals = function (totals, comb, arml, buff) {
                                     totals[key]["exceedOugiDamageLimit"] += 0.10;
                                 }
                             }
+                        } else if (stype == 'supplementalEmnity') {
+                            totals[key]['supplementalDamageBuffOnEmnity'].push({source: skilltypes[skillname].name, min: amount.min, coeff:amount.coeff});
+                        } else if (stype == 'supplementalCritical') {
+                            totals[key]['supplementalDamageBuffOnCritical'].push({source: skilltypes[skillname].name, limit: amount});
+                        } else if (stype == 'supplementalOugi') {
+                            totals[key]['supplementalDamageBuffOnOugi'].push({source: skilltypes[skillname].name, limit: amount})
+                        } else if (stype == 'supplementalMulti') {
+                            totals[key]['supplementalDamageBuffOnMulti'].push({source: skilltypes[skillname].name, limit: amount})
+                        } else if (stype == 'supplementalStaminaOugi') {
+                            let newAmount = Math.ceil(amount.coeff * (totals[key]["remainHP"]) + amount.min)
+                            totals[key]['supplementalDamageBuffOnOugi'].push({source: skilltypes[skillname].name, limit: newAmount})
                         } else {
                             totals[key][stype] += comb[i] * skillAmounts[stype][amount][slv - 1];
                         }
@@ -2385,7 +2558,6 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
             djeetaBuffList[djeetabuffkey] = 0.01 * parseFloat(prof[djeetabuffkey])
         }
     }
-
     var totals = {
         "Djeeta":
             {
@@ -2425,6 +2597,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 exHaisui: 0,
                 caimOther: 0,
                 sensei: 0,
+                exSensei: 0,
                 akashaSensei: 0,
                 bahaAT: 0,
                 bahaHP: 0,
@@ -2446,6 +2619,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 normalOtherLesserSante: 0,
                 superTA: 0,
                 normalCritical: 0,
+                normalCritical2: 0,
                 normalOtherCritical: [],
                 magnaCritical: 0,
                 cosmosAT: 0,
@@ -2458,10 +2632,12 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 opusmagnaElement: 0,
                 dracoATK: 0,
                 normalElement: 0,
+                magnaElement: 0,
                 shinTenNoInori: 0,
                 slaysnakes_myth: 0,
                 victorys_promise: 0,
                 normalOugiDamage: 0,
+                normalOtherOugiDamage: 0,
                 magnaOugiDamage: 0,
                 superOugiDamage: 0,
                 chainDamage: 0,
@@ -2489,6 +2665,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 elementBuffBoostBuff: 0,
                 otherBuff: djeetaBuffList["personalOtherBuff"],
                 otherBuff2: djeetaBuffList["personalOtherBuff2"],
+                otherBuffBoostBuff: 0,
                 damageUPOnlyNormalBuff: djeetaBuffList["personalDamageUPOnlyNormalBuff"],
                 HPBuff: djeetaBuffList["personalHPBuff"],
                 DABuff: djeetaBuffList["personalDABuff"],
@@ -2527,6 +2704,12 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 echoThirdHit: 0,
                 //debuffCount: 0,
                 accuracyDebuff: 0,
+                normalAtkCountBonus: 0,
+                keenBuff: prof.personalKeenBuffEnabled || prof.keenBuffEnabled,
+                supplementalDamageBuffOnCritical: [],
+                supplementalDamageBuffOnOugi: [],
+                supplementalDamageBuffOnEmnity: [],
+                supplementalDamageBuffOnMulti: []
             }
     };
 
@@ -2591,6 +2774,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 element: charaelement,
                 LB: charaLB,
                 EXLB: charaEXLB,
+                awakeningLv: parseInt(chara[i].awakeningLv) || 1,
                 HPdebuff: 0.00,
                 magna: 0,
                 magnaSoka: 0,
@@ -2612,6 +2796,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 exHaisui: 0,
                 caimOther: 0,
                 sensei: 0,
+                exSensei: 0,
                 akashaSensei: 0,
                 bahaAT: 0,
                 bahaHP: 0,
@@ -2633,6 +2818,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 normalOtherLesserSante: 0,
                 superTA: 0,
                 normalCritical: 0,
+                normalCritical2: 0,
                 normalOtherCritical: [],
                 magnaCritical: 0,
                 cosmosAT: 0,
@@ -2645,11 +2831,13 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 opusmagnaElement: 0,
                 dracoATK: 0,
                 normalElement: 0,
+                magnaElement: 0,
                 shinTenNoInori: 0,
                 slaysnakes_myth: 0,
                 victorys_promise: 0,
                 chainDamage: 0,
                 normalOugiDamage: 0,
+                normalOtherOugiDamage: 0,
                 magnaOugiDamage: 0,
                 superOugiDamage: 0,
                 normalChainDamage: 0,
@@ -2675,6 +2863,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 elementBuffBoostBuff: 0,
                 otherBuff: charaBuffList["otherBuff"],
                 otherBuff2: charaBuffList["otherBuff2"],
+                otherBuffBoostBuff: 0,
                 damageUPOnlyNormalBuff: charaBuffList["damageUPOnlyNormalDamageBuff"],
                 HPBuff: charaBuffList["hpBuff"],
                 DABuff: charaBuffList["daBuff"],
@@ -2713,6 +2902,12 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 //buffCount: 0,
                 //debuffCount: 0,
                 accuracyDebuff: 0,
+                normalAtkCountBonus: 0,
+                keenBuff: chara[i].keenBuffEnabled || prof.keenBuffEnabled,
+                supplementalDamageBuffOnCritical: [],
+                supplementalDamageBuffOnOugi: [],
+                supplementalDamageBuffOnEmnity: [],
+                supplementalDamageBuffOnMulti: []
             };
         }
     }
@@ -2739,6 +2934,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
                 ougiDamage: 0,
                 tenshiDamageUP: 0,
                 damageLimit: 0,
+                supplementalDamage: 0,
                 shivaBuff: false
             };
 
@@ -2776,6 +2972,7 @@ module.exports.getInitialTotals = function (prof, chara, summon) {
             if (!isNaN(summon[s].ougiDamage)) totalSummon["ougiDamage"] = 0.01 * parseInt(summon[s].ougiDamage);
             if (!isNaN(summon[s].tenshiDamageUP)) totalSummon["tenshiDamageUP"] = parseInt(summon[s].tenshiDamageUP);
             if (!isNaN(summon[s].damageLimit)) totalSummon["damageLimit"] = parseInt(summon[s].damageLimit);
+            if (!isNaN(summon[s].supplementalDamage)) totalSummon["supplementalDamage"] = parseInt(summon[s].supplementalDamage);
             if (!isNaN(summon[s].shivaBuff)) totalSummon["shivaBuff"] = summon[s].shivaBuff;
 
             totals[key]["totalSummon"][s] = totalSummon
@@ -2887,6 +3084,13 @@ module.exports.treatSupportAbility = function (totals, chara, comb, arml, buff) 
                         }
                     }
                     continue;
+                case "element_buff_boost_other_own":
+                    for (let [name, chara] of support.range(totals, key)) {
+                        if (when.element_buff(chara, buff)) {
+                            chara["otherBuffBoostBuff"] = Math.max(support.value, chara["otherBuffBoostBuff"]);
+                        }
+                    }
+                    continue;
                 case "eternal_wisdom":
                     if (totals[key]["elementBuff"] > 0 || buff["element"] > 0) {
                         totals[key]["normalBuff"] += 0.30;
@@ -2895,7 +3099,7 @@ module.exports.treatSupportAbility = function (totals, chara, comb, arml, buff) 
                     }
                     continue;
                 case "emnity_all_SL10":
-                    // Refer to HP of Zahlhamelina/Yuisis (Fire)
+                    // Refer to HP of Zahlhamelina, Yuisis (Fire), Predator
                     var charaHaisuiValue = module.exports.calcHaisuiValue("charaHaisui", "L", 10, totals[key]["remainHP"]);
                     for (let [name, chara] of range[support.range](totals, key)) {
                         chara["charaHaisui"] = Math.max(chara["charaHaisui"], charaHaisuiValue);
@@ -2976,9 +3180,14 @@ module.exports.treatSupportAbility = function (totals, chara, comb, arml, buff) 
                     //     }
                     // }
                     continue;
-                case "element_buff_boost_damageUP_own_10":
+                case "element_buff_boost_damageUP_own":
                     if (when.element_buff(totals[key], buff)) {
                         totals[key]["charaDamageUP"] += support.value;
+                    }
+                    continue;
+                case "element_buff_boost_damageUP_normal_own":
+                    if (when.element_buff(totals[key], buff)) {
+                        totals[key]["damageUPOnlyNormalBuff"] += support.value;
                     }
                     continue;
                 case "critical_cap_up":
@@ -3048,6 +3257,63 @@ module.exports.treatSupportAbility = function (totals, chara, comb, arml, buff) 
                         totals[key]["ougiDamageLimitBuff"] += ougiDamageLimitBuff;
                     }
                     continue;
+                case "da_up_ta_up_damageUPOnlyNormal_fist":
+                    if (totals[key].isConsideredInAverage) {
+                        for (var key2 in totals) {
+                            if (favContains("fist", [totals[key2]["fav1"], totals[key2]["fav2"]])) {
+                                totals[key2]["DASupport"] += 0.10;
+                                totals[key2]["TASupport"] += 0.05;
+                                totals[key2]["damageUPOnlyNormalBuff"] += 0.03;
+                            }
+                        }
+                    } else {
+                        // Calculate yourself only if you do not put it in the average
+                        totals[key2]["DASupport"] += 0.10;
+                        totals[key2]["TASupport"] += 0.05;
+                        totals[key2]["damageUPOnlyNormalBuff"] += 0.03;
+                    }
+                    continue;
+                case "unwavering_conviction":
+                    if (totals[key]['remainHP'] < 0.25) {
+                        totals[key]["otherBuff"] += 0.50;
+                        totals[key]["DASupport"] += 1.00;
+                        totals[key]["TASupport"] += 0.30;
+                        totals[key]["ougiDamageBuff"] += 0.50;
+                        totals[key]["ougiDamageLimitBuff"] += 0.30;
+                    }
+                    continue;
+                case "sandy_sniper":
+                    totals[key]["ougiDamageBuff"] += 0.50;
+                    totals[key]["ougiDamageLimitBuff"] += 0.30;
+                    totals[key]["ougiGageBuff"] += 0.10;
+                    continue;
+                case "crazy_auguste":
+                    let n = 0
+                    for (var key2 in totals) {
+                        if (_contains(["(水着ver)", "(Summer)", "(浴衣ver)", "(Yukata)", "ゾーイ(リミテッドver)", "Zooey (Grand)"] , key2)) {
+                            n += 1;
+                        }
+                    }
+                    n = Math.min(n, 4);
+                    totals[key]["otherBuff"] += n * 0.15;
+                    totals[key]["DASupport"] += n * 0.20;
+                    totals[key]["TASupport"] += n * 0.05;
+                    continue;
+                case "lillie_liebe":
+                    if (index < 4) {
+                        let index2 = 0;
+                        for (var key2 in totals) {
+                            index2 = index2 + 1 | 0;
+                            if (index2 < 5) {
+                                if (_contains(["ヴィーラ", "Vira"] , key2)) {
+                                    totals[key]["DASupport"] += 10.00;
+                                    totals[key]["TASupport"] += 10.00;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    continue;
                 default:
                     break;
             }
@@ -3092,6 +3358,7 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
         "criticalAttack": {"max": 0, "min": 0},
         "totalExpected": {"max": 0, "min": 0},
         "expectedCycleDamagePerTurn": {"max": 0, "min": 0},
+        "expectedCycleDamagePerSecond": {"max": 0, "min": 0},
         "averageAttack": {"max": 0, "min": 0},
         "averageTotalExpected": {"max": 0, "min": 0},
         "averageCyclePerTurn": {"max": 0, "min": 0},
@@ -3112,11 +3379,13 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
     if (res.length > 1) {
         var AllTotalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllCycleDamagePerTurn = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
+        var AllCycleDamagePerSecond = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllCriticalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllTotalExpected = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllAverageTotalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllAverageTotalExpected = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllAverageCycleDamagePerTurn = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
+        var AllAverageCycleDamagePerSecond = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllAverageCriticalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AllTotalHP = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]]
     }
@@ -3144,10 +3413,12 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
         var CriticalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var TotalExpected = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var CycleDamagePerTurn = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
+        var CycleDamagePerSecond = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AverageTotalExpected = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AverageTotalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AverageCriticalAttack = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
         var AverageCycleDamagePerTurn = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
+        var AverageCycleDamagePerSecond = [[(displayRealHP ? intl.translate("残りHP", locale) : intl.translate("残HP割合", locale))]];
 
         var alreadyUsedHP = {};
 
@@ -3160,9 +3431,11 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
             CriticalAttack[0].push(title);
             TotalExpected[0].push(title);
             CycleDamagePerTurn[0].push(title);
+            CycleDamagePerSecond[0].push(title);
             AverageTotalExpected[0].push(title);
             AverageTotalAttack[0].push(title);
             AverageCycleDamagePerTurn[0].push(title);
+            AverageCycleDamagePerSecond[0].push(title);
             AverageCriticalAttack[0].push(title);
 
             // In the case of two or more summons
@@ -3172,10 +3445,12 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                 AllCriticalAttack[0].push("[" + summonHeader + "] " + title);
                 AllTotalExpected[0].push("[" + summonHeader + "] " + title);
                 AllCycleDamagePerTurn[0].push("[" + summonHeader + "] " + title);
+                AllCycleDamagePerSecond[0].push("[" + summonHeader + "] " + title);
                 AllAverageTotalExpected[0].push("[" + summonHeader + "] " + title);
                 AllAverageTotalAttack[0].push("[" + summonHeader + "] " + title);
                 AllAverageCriticalAttack[0].push("[" + summonHeader + "] " + title);
-                AllAverageCycleDamagePerTurn[0].push("[" + summonHeader + "] " + title)
+                AllAverageCycleDamagePerTurn[0].push("[" + summonHeader + "] " + title);
+                AllAverageCycleDamagePerSecond[0].push("[" + summonHeader + "] " + title);
             }
 
             for (var key in onedata) {
@@ -3288,7 +3563,7 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                 }
                 for (var k = 0; k <= 100; k++) {
                     var newTotalSkillCoeff = totalSkillWithoutHaisui * haisuiBuff[k].normalHaisui * haisuiBuff[k].magnaHaisui * (haisuiBuff[k].normalKonshin + haisuiBuff[k].normalSupportKonshin) * haisuiBuff[k].magnaKonshin * haisuiBuff[k].charaHaisui * haisuiBuff[k].exHaisui * haisuiBuff[k].lbHaisui * haisuiBuff[k].lbKonshin;
-                    var summedAttack = onedata[key].displayAttack;
+                    var summedAttack = onedata[key].summedAttack;
                     var newTotalAttack = summedAttack * newTotalSkillCoeff;
                     var newTotalExpected = newTotalAttack * onedata[key].criticalRatio * onedata[key].expectedAttack;
 
@@ -3314,6 +3589,23 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
 
                     newExpectedCycleDamagePerTurn /= (onedata[key].expectedTurn === Infinity ? 1 : onedata[key].expectedTurn + 1);
 
+                    var newExpectedLockoutTimePerTurn;
+                    if (onedata[key].expectedTurn === Infinity) {
+                        newExpectedLockoutTimePerTurn = 1.0 + (onedata[key].expectedAttack * 0.35);
+                    } else {
+                        // Base lockout + (Normal attack lockout * n times)
+                        let newExpectedCycleLockoutTime = onedata[key].expectedTurn * (1.0 + (onedata[key].expectedAttack * 0.35));
+                        // Ougi Lockout
+                        newExpectedCycleLockoutTime += 1.0 + 0.35;
+                        // Chainburst lockout
+                        let newChainNumber = Math.min(4, chainNumber);
+                        if (newChainNumber >= 2) {
+                            newExpectedCycleLockoutTime += (newChainNumber * 2 + 1.0) / newChainNumber;
+                        }
+                        newExpectedLockoutTimePerTurn = newExpectedCycleLockoutTime / (onedata[key].expectedTurn + 1.0);
+                    }
+                    var newExpectedCycleDamagePerSecond = newExpectedCycleDamagePerTurn / newExpectedLockoutTimePerTurn;
+
                     var hp;
                     if (displayRealHP) {
                         // Actual HP
@@ -3333,9 +3625,11 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                             TotalExpected.push([hp]);
                             CriticalAttack.push([hp]);
                             CycleDamagePerTurn.push([hp]);
+                            CycleDamagePerSecond.push([hp]);
                             AverageTotalAttack.push([hp]);
                             AverageTotalExpected.push([hp]);
                             AverageCycleDamagePerTurn.push([hp]);
+                            AverageCycleDamagePerSecond.push([hp]);
                             AverageCriticalAttack.push([hp]);
                             index = alreadyUsedHP[hp] - 1;
 
@@ -3343,12 +3637,14 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                                 // In order to make a scatter diagram, we will create a result field first
                                 TotalAttack[index].push(null);
                                 CycleDamagePerTurn[index].push(null);
+                                CycleDamagePerSecond[index].push(null);
                                 CriticalAttack[index].push(null);
                                 TotalExpected[index].push(null);
                                 TotalHP[index].push(null);
                                 AverageTotalAttack[index].push(null);
                                 AverageTotalExpected[index].push(null);
                                 AverageCycleDamagePerTurn[index].push(null);
+                                AverageCycleDamagePerSecond[index].push(null);
                                 AverageCriticalAttack[index].push(null)
                             }
 
@@ -3362,9 +3658,11 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                                     AllTotalExpected.push([hp]);
                                     AllCriticalAttack.push([hp]);
                                     AllCycleDamagePerTurn.push([hp]);
+                                    AllCycleDamagePerSecond.push([hp]);
                                     AllAverageTotalAttack.push([hp]);
                                     AllAverageTotalExpected.push([hp]);
                                     AllAverageCycleDamagePerTurn.push([hp]);
+                                    AllAverageCycleDamagePerSecond.push([hp]);
                                     AllAverageCriticalAttack.push([hp]);
                                     allindex = allAlreadyUsedHP[hp] - 1;
 
@@ -3372,12 +3670,14 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                                     for (var subj = 0; subj < res.length * oneresult.length; subj++) {
                                         AllTotalAttack[allindex].push(null);
                                         AllCycleDamagePerTurn[allindex].push(null);
+                                        AllCycleDamagePerSecond[allindex].push(null);
                                         AllCriticalAttack[allindex].push(null);
                                         AllTotalExpected[allindex].push(null);
                                         AllTotalHP[allindex].push(null);
                                         AllAverageTotalAttack[allindex].push(null);
                                         AllAverageTotalExpected[allindex].push(null);
                                         AllAverageCycleDamagePerTurn[allindex].push(null);
+                                        AllAverageCycleDamagePerSecond[allindex].push(null);
                                         AllAverageCriticalAttack[allindex].push(null)
                                     }
                                 }
@@ -3389,15 +3689,18 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                         TotalExpected[index][j + 1] = parseInt(newTotalExpected);
                         CriticalAttack[index][j + 1] = parseInt(onedata[key].criticalRatio * newTotalAttack);
                         CycleDamagePerTurn[index][j + 1] = parseInt(newExpectedCycleDamagePerTurn);
+                        CycleDamagePerSecond[index][j + 1] = parseInt(newExpectedCycleDamagePerSecond);
                         AverageTotalAttack[index][j + 1] += parseInt(newTotalAttack / cnt);
                         AverageTotalExpected[index][j + 1] += parseInt(newTotalExpected / cnt);
                         AverageCycleDamagePerTurn[index][j + 1] += parseInt(newExpectedCycleDamagePerTurn / cnt);
+                        AverageCycleDamagePerSecond[index][j + 1] = parseInt(newExpectedCycleDamagePerSecond / cnt);
                         AverageCriticalAttack[index][j + 1] += parseInt(onedata[key].criticalRatio * newTotalAttack / cnt)
                     } else if (considerAverageArray[key]) {
                         var index = alreadyUsedHP[hp] - 1;
                         AverageTotalAttack[index][j + 1] += parseInt(newTotalAttack / cnt);
                         AverageTotalExpected[index][j + 1] += parseInt(newTotalExpected / cnt);
                         AverageCycleDamagePerTurn[index][j + 1] += parseInt(newExpectedCycleDamagePerTurn / cnt);
+                        AverageCycleDamagePerSecond[index][j + 1] = parseInt(newExpectedCycleDamagePerSecond / cnt);
                         AverageCriticalAttack[index][j + 1] += parseInt(onedata[key].criticalRatio * newTotalAttack / cnt)
                     }
                 }
@@ -3423,10 +3726,12 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
                     AllCriticalAttack[allindex][allj] = CriticalAttack[index][j + 1];
                     AllTotalExpected[allindex][allj] = TotalExpected[index][j + 1];
                     AllCycleDamagePerTurn[allindex][allj] = CycleDamagePerTurn[index][j + 1];
+                    AllCycleDamagePerSecond[allindex][allj] = CycleDamagePerTurn[index][j + 1];
                     AllAverageTotalExpected[allindex][allj] = AverageTotalExpected[index][j + 1];
                     AllAverageTotalAttack[allindex][allj] = AverageTotalAttack[index][j + 1];
                     AllAverageCriticalAttack[allindex][allj] = AverageCriticalAttack[index][j + 1];
-                    AllAverageCycleDamagePerTurn[allindex][allj] = AverageCycleDamagePerTurn[index][j + 1]
+                    AllAverageCycleDamagePerTurn[allindex][allj] = AverageCycleDamagePerTurn[index][j + 1];
+                    AllAverageCycleDamagePerSecond[allindex][allj] = AverageCycleDamagePerSecond[index][j + 1];
                 }
             }
         }
@@ -3434,11 +3739,13 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
         data[summonHeader] = {};
         data[summonHeader]["totalAttack"] = TotalAttack;
         data[summonHeader]["expectedCycleDamagePerTurn"] = CycleDamagePerTurn;
+        data[summonHeader]["expectedCycleDamagePerSecond"] = CycleDamagePerSecond;
         data[summonHeader]["criticalAttack"] = CriticalAttack;
         data[summonHeader]["totalExpected"] = TotalExpected;
         data[summonHeader]["averageCriticalAttack"] = AverageCriticalAttack;
         data[summonHeader]["averageAttack"] = AverageTotalAttack;
         data[summonHeader]["averageCyclePerTurn"] = AverageCycleDamagePerTurn;
+        data[summonHeader]["averageCyclePerSecond"] = AverageCycleDamagePerSecond;
         data[summonHeader]["averageTotalExpected"] = AverageTotalExpected;
         data[summonHeader]["totalHP"] = TotalHP
     }
@@ -3451,9 +3758,11 @@ module.exports.generateHaisuiData = function (res, arml, summon, prof, chara, st
         data[matomete]["criticalAttack"] = AllCriticalAttack;
         data[matomete]["totalExpected"] = AllTotalExpected;
         data[matomete]["expectedCycleDamagePerTurn"] = AllCycleDamagePerTurn;
+        data[matomete]["expectedCycleDamagePerSecond"] = AllCycleDamagePerSecond;
         data[matomete]["averageAttack"] = AllAverageTotalAttack;
         data[matomete]["averageCriticalAttack"] = AllAverageCriticalAttack;
         data[matomete]["averageCyclePerTurn"] = AllAverageCycleDamagePerTurn;
+        data[matomete]["averageCyclePerSecond"] = AllAverageCycleDamagePerSecond;
         data[matomete]["averageTotalExpected"] = AllAverageTotalExpected
     }
 
@@ -3544,7 +3853,7 @@ module.exports.generateSimulationData = function (res, turnBuff, arml, summon, p
                 for (var key in onedata) {
                     if (turnBuff.buffs["全体バフ"][t - 1].turnType == "ougi" || turnBuff.buffs[key][t - 1].turnType == "ougi") {
                         // Basically, setting of mystery takes precedence
-                        var newOugiDamage = module.exports.calcOugiDamage(onedata[key].displayAttack, onedata[key].totalSkillCoeff, onedata[key].criticalRatio, prof.enemyDefense, prof.defenseDebuff, onedata[key].skilldata.enemyResistance, prof.ougiRatio, onedata[key].skilldata.ougiDamageUP, onedata[key].skilldata.damageUP, onedata[key].ougiFixedDamage, onedata[key].ougiBonusPlainDamage, onedata[key].ougiDamageLimitValues);
+                        var newOugiDamage = module.exports.calcOugiDamage(onedata[key].summedAttack, onedata[key].totalSkillCoeff, onedata[key].criticalRatio, prof.enemyDefense, prof.defenseDebuff, onedata[key].skilldata.enemyResistance, prof.ougiRatio, onedata[key].skilldata.ougiDamageUP, onedata[key].skilldata.damageUP, onedata[key].ougiFixedDamage, onedata[key].ougiBonusPlainDamage, onedata[key].ougiDamageLimitValues);
                         if (key == "Djeeta") {
                             ExpectedDamage[t].push(parseInt(newOugiDamage));
                             AverageExpectedDamage[t][j + 1] += parseInt(newOugiDamage / cnt)
@@ -3559,7 +3868,7 @@ module.exports.generateSimulationData = function (res, turnBuff, arml, summon, p
                         }
                     } else {
                         // Regular attack
-                        var newDamage = module.exports.calcDamage(onedata[key].displayAttack, onedata[key].totalSkillCoeff, onedata[key].criticalRatio, prof.enemyDefense, prof.defenseDebuff, onedata[key].skilldata.enemyResistance, onedata[key].skilldata.additionalDamage, onedata[key].skilldata.damageUP + onedata[key].skilldata.damageUPOnlyNormalDamage, onedata[key].normalDamageLimitValues);
+                        var newDamage = module.exports.calcDamage(onedata[key].summedAttack, onedata[key].totalSkillCoeff, onedata[key].criticalRatio, prof.enemyDefense, prof.defenseDebuff, onedata[key].skilldata.enemyResistance, onedata[key].skilldata.additionalDamage, onedata[key].skilldata.damageUP + onedata[key].skilldata.damageUPOnlyNormalDamage, onedata[key].normalDamageLimitValues);
                         var accuracy = 1.0;
                         accuracy -= (onedata[key].skilldata.accuracyDebuff - 1.0);
                         newDamage *= accuracy;

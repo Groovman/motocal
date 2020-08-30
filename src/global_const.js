@@ -86,7 +86,11 @@ module.exports.getElementColorPreset = (function (id, label, element, locale, ca
 });
 
 
-module.exports._ua = (function (u) {
+module.exports._ua = (function () {
+    if (!self.window) {
+      return null;
+    }
+    var u = self.window.navigator.userAgent.toLowerCase();
     return {
         Tablet: (u.indexOf("windows") != -1 && u.indexOf("touch") != -1 && u.indexOf("tablet pc") == -1)
             || u.indexOf("ipad") != -1 || (u.indexOf("android") != -1 && u.indexOf("mobile") == -1)
@@ -96,7 +100,7 @@ module.exports._ua = (function (u) {
             || u.indexOf("ipod") != -1 || (u.indexOf("android") != -1 && u.indexOf("mobile") != -1)
             || (u.indexOf("firefox") != -1 && u.indexOf("mobile") != -1) || u.indexOf("blackberry") != -1
     }
-})(window.navigator.userAgent.toLowerCase());
+})();
 
 module.exports.BASE_LIMIT_VALUES = {
     normalDamage: [[600000, 0.01], [500000, 0.05], [400000, 0.60], [300000, 0.80]],
@@ -801,8 +805,9 @@ var keyTypes = {
     "totalExpected": "総合攻撃*期待回数*技巧期待値(ジータさんのみ)",
     "averageTotalExpected": "総回技のパーティ平均値",
     "expectedCycleDamagePerTurn": "予想ターン毎ダメージ(ジータさんのみ)",
+    "expectedCycleDamagePerSecond": "予想秒毎ダメージ(ジータさんのみ)",
     "averageCyclePerTurn": "予想ターン毎ダメージのパーティ平均値",
-//    "averageCyclePerTime": "予想ダメージ経時的な",
+    "averageCyclePerSecond": "予想秒毎ダメージのパーティ平均値",
 };
 var supportedChartSortkeys = {
     "totalAttack": "攻撃力(二手技巧無し,ジータさんのみ)",
@@ -812,8 +817,9 @@ var supportedChartSortkeys = {
     "totalExpected": "総合攻撃*期待回数*技巧期待値(ジータさんのみ)",
     "averageTotalExpected": "総回技のパーティ平均値",
     "expectedCycleDamagePerTurn": "予想ターン毎ダメージ(ジータさんのみ)",
+    "expectedCycleDamagePerSecond": "予想秒毎ダメージ(ジータさんのみ)",
     "averageCyclePerTurn": "予想ターン毎ダメージのパーティ平均値",
-//    "averageCyclePerTime": "予想ダメージ経時的な",
+    "averageCyclePerSecond": "予想秒毎ダメージのパーティ平均値",
     "totalHP": "ジータさん残りHP",
 };
 var supportedTurnChartSortkeys = {
@@ -822,8 +828,9 @@ var supportedTurnChartSortkeys = {
     "criticalAttack": "技巧期待値(ジータさんのみ)",
     "averageCriticalAttack": "技巧期待平均攻撃力",
     "expectedCycleDamagePerTurn": "予想ターン毎ダメージ(ジータさんのみ)",
+    "expectedCycleDamagePerSecond": "予想秒毎ダメージ(ジータさんのみ)",
     "averageCyclePerTurn": "予想ターン毎ダメージのパーティ平均値",
-//    "averageCyclePerTime": "予想ダメージ経時的な",
+    "averageCyclePerSecond": "予想秒毎ダメージのパーティ平均値",
 };
 var supportedSimulationChartSortkeys = {
     "averageAttack": "パーティ平均攻撃力(二手技巧無し)",
@@ -841,15 +848,18 @@ var skilltypes = {
     "normalL": {name: "通常攻刃(大)", type: "normal", amount: "L"},
     "normalLL": {name: "通常攻刃II", type: "normal", amount: "LL"},
     "normalLLM": {name: "通常攻刃III", type: "normal", amount: "LLM"},
+    "normalLLLL": {name: "劫風の攻刃", type: "normalOther", amount: "LLLL"},
     "normalBoukunL": {name: "通常暴君", type: "normalBoukun", amount: "L"},
     "normalBoukunLLL": {name: "通常暴君II", type: "normalBoukun", amount: "LLL"},
     "normalSoka": {name: "通常楚歌", type: "normalSoka", amount: "M"},
     "normalHaisuiS": {name: "通常背水(小)", type: "normalHaisui", amount: "S"},
     "normalHaisuiM": {name: "通常背水(中)", type: "normalHaisui", amount: "M"},
     "normalHaisuiL": {name: "通常背水(大)", type: "normalHaisui", amount: "L"},
+    "normalHaisuiLL": {name: "通常背水(特大)", type: "normalOtherHaisui", amount: "LL"},
     "normalKonshinS": {name: "通常渾身(小)", type: "normalKonshin", amount: "S"},
     "normalKonshinM": {name: "通常渾身(中)", type: "normalKonshin", amount: "M"},
     "normalKonshinL": {name: "通常渾身(大)", type: "normalKonshin", amount: "L"},
+    "normalKonshinLL": {name: "通常渾身(特大)", type: "normalOtherKonshin", amount: "LL"},
     "normalOtherKonshinL": {name: "通常渾身(大)(神石加護無効)", type: "normalOtherKonshin", amount: "L"},
     "normalNiteS": {name: "通常二手(小)", type: "normalNite", amount: "S"},
     "normalNiteM": {name: "通常二手(中)", type: "normalNite", amount: "M"},
@@ -857,6 +867,7 @@ var skilltypes = {
     "normalSanteS": {name: "通常三手(小)", type: "normalSante", amount: "S"},
     "normalSanteM": {name: "通常三手(中)", type: "normalSante", amount: "M"},
     "normalSanteL": {name: "通常三手(大)", type: "normalSante", amount: "L"},
+    "normalSanteLL": {name: "通常三手(特大)", type: "normalOtherSante", amount: "LLL"},
     "normalKatsumiS": {name: "通常克己(小)", type: "normalKatsumi", amount: "S"},
     "normalKatsumiM": {name: "通常克己(中)", type: "normalKatsumi", amount: "M"},
     "normalKamui": {name: "通常神威(小)", type: "normalKamui", amount: "S"},
@@ -868,10 +879,12 @@ var skilltypes = {
     "normalMusouLL": {name: "通常無双II", type: "normalMusou", amount: "LL"},
     "normalJinkaiS": {name: "通常刃界(小)", type: "normalJinkai", amount: "S"},
     "normalRanbuS": {name: "通常乱舞(小)", type: "normalRanbu", amount: "S"},
+    "normalRanbuM": {name: "通常乱舞(中)", type: "normalRanbu", amount: "M"},
     "normalCriticalS": {name: "通常技巧(小)", type: "normalCritical", amount: "S"},
     "normalCriticalM": {name: "通常技巧(中)", type: "normalCritical", amount: "M"},
     "normalCriticalL": {name: "通常技巧(大)", type: "normalCritical", amount: "L"},
     "normalCriticalLL": {name: "通常技巧II", type: "normalCritical", amount: "LL"},
+    "normalCriticalLLL": {name: "水禍の技巧", type: "normalCritical2", amount: "LLL"},
     "normalSetsunaS": {name: "通常刹那(小)", type: "normalSetsuna", amount: "S"},
     "normalSetsuna": {name: "通常刹那(中)", type: "normalSetsuna", amount: "M"},
     "normalSetsunaL": {name: "通常刹那(大)", type: "normalSetsuna", amount: "L"},
@@ -879,6 +892,7 @@ var skilltypes = {
     "normalHiouS": {name: "通常秘奥(小)", type: "normalHiou", amount: "S"},
     "normalHiouM": {name: "通常秘奥(中)", type: "normalHiou", amount: "M"},
     "normalHiouL": {name: "通常秘奥(大)", type: "normalHiou", amount: "L"},
+    "normalHiouLL": {name: "巌迫の秘奥", type: "normalOtherHiou", amount: "LL"},
     "normalHissatsuM": {name: "通常必殺(中)", type: "normalHissatsu", amount: "M"},
     "normalHissatsuL": {name: "通常必殺(大)", type: "normalHissatsu", amount: "L"},
     "normalEiketsuL": {name: "通常英傑(大)", type: "normalEiketsu", amount: "L"},
@@ -926,7 +940,8 @@ var skilltypes = {
     "strengthL": {name: "EX攻刃(大)", type: "ex", amount: "L"},
     "strengthLL": {name: "EX攻刃(特大)", type: "ex", amount: "LL"},
     "strengthLLL": {name: "EX攻刃(極大)", type: "ex", amount: "LLL"},
-    "exATKandHPM": {name: "EX攻刃+守護(中)", type: "exATKandHP", amount: "M"},
+    "strengthLLandHPS": {name: "EX攻刃(特大)+守護(小)", type: "exATKandHP", amount: "LL-S"},
+    "exATKandHPM": {name: "EX攻刃+守護(中)", type: "exATKandHP", amount: "M-M"},
     "normalDamageLimit2_5": {name: "通常上限UP(2.5%)", type: "normalDamageLimit", amount: "S"},
     "normalDamageLimit7": {name: "通常上限UP(7.0%)", type: "normalDamageLimit", amount: "M"},
     "normalDamageLimit10": {name: "通常上限UP(10%)", type: "normalDamageLimit", amount: "L"},
@@ -1016,6 +1031,7 @@ var skilltypes = {
     "bahaFUHP-bow": {name: "バハフツHP-弓", type: "bahaFUHP", amount: "L"},
     "bahaFUHP-music": {name: "バハフツHP-楽器", type: "bahaFUHP", amount: "L"},
     "sensei": {name: "先制", type: "sensei", amount: "M"},
+    "exSensei": {name: "EX先制", type: "exSensei", amount: "M"},
     "omega-raw": {name: "オメガ-未強化", type: "omega", amount: "raw"},
     "omega-senni": {name: "オメガ-戦意", type: "omega", amount: "senni"},
     "omega-tousou": {name: "オメガ-闘争", type: "omega", amount: "tousou"},
@@ -1047,6 +1063,7 @@ var skilltypes = {
     "dracoATK": {name: "竜進境(最大時)", type: "dracoATK", amount: 0.001},
     "normalElementM": {name: "通常進境(中)(最大時)", type: "normalElement", amount: "M"},
     "normalElementL": {name: "通常進境(大)(最大時)", type: "normalElement", amount: "L"},
+    "magnaElementM": {name: "マグナ進境(中)(最大時)", type: "magnaElement", amount: "M"},
     "tenshiShukufuku": {name: "天司の祝福", type: "tenshiShukufuku", amount: "M"},
     "tenshiShukufukuII": {name: "天司の祝福II", type: "tenshiShukufuku", amount: "L"},
     "tenshiShukufukuIII": {name: "天司の祝福III", type: "tenshiShukufuku", amount: "LL"},
@@ -1076,6 +1093,12 @@ var skilltypes = {
     "apocalyptic_powerII": {name: "万物を砕く剛技II", type: "apocalyptic_power", amount: "II"},
     "slaysnakes_myth": {name: "戮蛇の神刀", type: "slaysnakes_myth", amount: "I"},
     "slaysnakes_mythII": {name: "戮蛇の神刀II", type: "slaysnakes_myth", amount: "II"},
+    "normalAtkFistPugilism": {name: "古代の闘術", type: "normalAtkCount", amount: "fist"},
+    "supplementalEmnity": {name: "朱の誓約", type: "supplementalEmnity", amount: {min:10000, coeff:50000}},
+    "supplementalCritical": {name: "碧の誓約", type: "supplementalCritical", amount: 50000},
+    "supplementalOugi": {name: "金の誓約", type: "supplementalOugi", amount: 400000},
+    "supplementalMulti": {name: "白の誓約", type: "supplementalMulti", amount: [30000, 60000, 100000]},
+    "supplementalStaminaOugi": {name: "黒の誓約", type: "supplementalStaminaOugi", amount: {min:100000, coeff:500000}},
 };
 
 // additional selection when template is selected
@@ -1263,6 +1286,7 @@ var elementTypes = {
 
 var series = {
     "epic": "エピックウェポン",
+    "grand": "リミテッドシリーズ",
     "none": "無",
 };
 
@@ -1860,6 +1884,18 @@ module.exports.Jobs = {
         "DaBonus": 22.0,
         "TaBonus": 3.0
     },
+    "monk": {
+        "name": "モンク",
+        "favArm1": "wand",
+        "favArm2": "fist",
+        "type": "attack",
+        "atBonus": 3000.0,
+        "kouzinBonus": 0.0,
+        "hpBonus": 0.0,
+        "shugoBonus": 0.0,
+        "DaBonus": 4.0,
+        "TaBonus": 1.0,
+    },
     "none": {
         "name": "なし",
         "favArm1": "none",
@@ -1907,6 +1943,7 @@ var skillAmounts = {
         "LLM": [8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 22.5, 23.0, 23.5, 24.0, 24.5],
         //Tyranny II(暴君II)
         "LLL": [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5],
+        "LLLL": [16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.75, 28.5, 30.25, 32.0, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0]
     },
     "magna": {
         "S": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.4, 10.8, 11.2, 11.6, 12.0, 12.1, 12.2, 12.3, 12.4, 12.5],
@@ -1917,8 +1954,8 @@ var skillAmounts = {
         "S": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.4, 10.8, 11.2, 11.6, 12.0, 12.6, 13.2, 13.8, 14.4, 15.0],
         "M": [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0],
         "L": [6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 15.6, 16.2, 16.8, 17.4, 18.0, 18.6, 19.2, 19.8, 20.4, 21.0],
-        "LL": [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 26.0, 27.0, 28.0],
-        "LLL": [12.0, 13.44, 14.89, 16.33, 17.78, 19.22, 20.66, 22.11, 23.56, 25.0, 26.6, 28.2, 29.8, 31.4, 33.0, 33.0, 33.0, 33.0, 33.0, 33.0],
+        "LL": [9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 23.5, 24.0, 24.5, 25.0, 25.5],
+        "LLL": [12.0, 13.44, 14.89, 16.33, 17.78, 19.22, 20.66, 22.11, 23.56, 25.0, 26.6, 28.2, 29.8, 31.4, 33.0, 33.8, 34.6, 35.4, 36.2, 37.0],
     },
     "normalHP": {
         "S": [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 12.4, 12.8, 13.2, 13.6, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0],
@@ -1932,7 +1969,7 @@ var skillAmounts = {
         "L": [6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 15.6, 16.2, 16.8, 17.4, 18.0, 18.4, 18.8, 19.2, 19.6, 20.0],
     },
     "exHP": {
-        "S": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.4, 10.8, 11.2, 11.6, 12.0, 12.6, 13.2, 13.8, 14.4, 15.0],
+        "S": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 10.4, 10.8, 11.2, 11.6, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0],
         "M": [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5, 15.0, 15.5, 16.0, 16.5, 17.0],
         "L": [6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 15.6, 16.2, 16.8, 17.4, 18.0, 18.6, 19.2, 19.8, 20.4, 21.0],
     },
@@ -1976,18 +2013,22 @@ var skillAmounts = {
         "L": [1.2, 1.6, 2.0, 2.4, 2.8, 3.2, 3.6, 4.0, 4.4, 5.0, 5.4, 5.8, 6.2, 6.6, 7.0, 7.3, 7.6, 7.9, 8.2, 8.5],
         // used by Mirror-Blade Shard(刃鏡片)
         "LL": [1.6, 2.2, 2.8, 3.4, 4.0, 4.6, 5.2, 5.8, 6.4, 7.0, 7.4, 7.8, 8.2, 8.6, 9.0, 9.3, 9.6, 9.9, 10.2, 10.5],
+        "LLL": [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 11.6, 12.4, 12.9, 13.5, 14.0, 14.0, 14.0, 14.0, 14.0, 14.0],
     },
     "critical": {
-        "S": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
-        "M": [3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8, 5.0, 5.3, 5.6, 5.9, 6.2, 6.5, 6.5, 6.5, 6.5, 6.5, 6.5],
+        "S": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0],
+        "M": [3.2, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6, 4.8, 5.0, 5.3, 5.6, 5.9, 6.2, 6.5, 6.7, 6.9, 7.1, 7.3, 7.5],
         "L": [4.4, 4.8, 5.2, 5.6, 6.0, 6.4, 6.8, 7.2, 7.6, 8.0, 8.4, 8.8, 9.2, 9.6, 10.0, 10.2, 10.4, 10.6, 10.8, 11.0],
         // FIXME: Applied fitting pattern, needs update when numbers are available
         "LL": [5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.4, 10.8, 11.2, 11.6, 12.0, 12.2, 12.4, 12.6, 12.8, 13.0],
+        "LLL": [8.0, 9.4, 10.4, 11.6, 12.8, 14.0, 15.0, 16.0, 16.8, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0],
         "ratio": 0.5,
     },
     "normalRanbu": {
         //only TA effect
-        "S": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+        "S": [0.18, 0.31, 0.44, 0.57, 0.7, 0.83, 0.96, 1.09, 1.22, 1.35, 1.48, 1.61, 1.74, 1.87, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0],
+        // FIXME: Values taken from normal multiattack small, real values currently unknown
+        "M": [0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.46, 2.72, 2.98, 3.24, 3.5, 3.66, 3.82, 3.98, 4.14, 4.3],
     },
     "magnaRanbu": {
         //only TA effect
@@ -2007,6 +2048,9 @@ var skillAmounts = {
     "sensei": {
         "M": [5.0, 6.0, 7.0, 8.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0],
     },
+    "exSensei": {
+        "M": [1.0, 1.45, 1.9, 2.35, 2.8, 3.25, 3.7, 4.1, 4.55, 5.0, 5.6, 6.2, 6.8, 7.4, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0],
+    },
     // Royal Wing Barrier(鷲王の結界)
     "washiouKekkai": {
         "M": [6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.0, 13.0, 13.0, 13.0, 13.0],
@@ -2015,7 +2059,8 @@ var skillAmounts = {
     "normalHiou": {
         "S": [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 7.5, 7.5, 7.5, 7.5, 7.5],
         "M": [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 9.5, 9.5, 9.5, 9.5, 9.5],
-        "L": [5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 12.5, 12.5, 12.5, 12.5, 12.5]
+        "L": [5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 12.5, 12.5, 12.5, 12.5, 12.5],
+        "LL": [11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0],
     },
     // normal Sentence limit up (通常必殺(奥義上限部分))
     "normalOugiDamageLimitHissatsu": {
@@ -2124,6 +2169,12 @@ var supportAbilities = {
         "range": "all",
         "value": 0.10
     },
+    "da_up_ta_up_damageUPOnlyNormal_fist_10_5_3": {
+        "name": "格闘キャラDA率10%UP&TA率5%UP&与ダメージ3%UP(通常攻撃のみ)(ラインハルザ(リミテッドver))",
+        "type": "da_up_ta_up_damageUPOnlyNormal_fist",
+        "range": "all",
+        "value": 0.0
+    },
     "hp_down_own_15": {
         "name": "HP15%DOWN(水着イシュ, マルキ, ロザミア)",
         "type": "HPBuff",
@@ -2143,10 +2194,16 @@ var supportAbilities = {
         "value": 0.15
     },
     "hp_up_own_20": {
-        "name": "HP20%UP(ソリッズ, ファスティバ(SSR))",
+        "name": "HP20%UP(ファスティバ(SSR))",
         "type": "HPBuff",
         "range": "own",
         "value": 0.20
+    },
+    "hp_up_own_30": {
+        "name": "HP30%UP(ソリッズ)",
+        "type": "HPBuff",
+        "range": "own",
+        "value": 0.30
     },
     "atk_up_own_5": {
         "name": "攻撃5%UP(レディグレイ)",
@@ -2238,6 +2295,16 @@ var supportAbilities = {
             }
         ]
     },
+    "ougi_gage_down_own_50_damageUP_25": {
+        "name": "奥義ゲージ上昇量50%DOWN。&与ダメージ上昇25%UP(シュラ)",
+        "type": "composite",
+        "range": "own",
+        "value": [
+            {ID: "ougiCapUP_40"},
+            {type: "charaDamageUP", range: "own", assign: "add", value: 0.25},
+            {type: "ougiGageBuff", range: "own", assign: "add", value: -0.50}
+        ]
+    },
     "ougi_gage_up_djeeta_20": {
         "name": "主人公の奥義ゲージ上昇量20%UP。(クラリス(バレンタインver))",
         "type": "ougiGageBuff",
@@ -2265,7 +2332,7 @@ var supportAbilities = {
         ]
     },
     "emnity_all_SL10": {
-        "name": "全体背水効果(ザルハメリナ, 火ユイシス)",
+        "name": "全体背水効果(ザルハメリナ,ユイシス(火属性ver), プレデター(SSR))",
         "type": "emnity_all_SL10",
         "range": "all",
         "value": 0.00
@@ -2313,7 +2380,7 @@ var supportAbilities = {
         "value": 0.00
     },
     "sumizome_sakura": {
-        "name": "自分が瀕死状態の場合、必ずトリプルアタック/火属性追撃効果/奥義・アビリティに追加効果付与(ユイシス(火属性ver))",
+        "name": "自分が瀕死状態の場合、必ずトリプルアタック/火属性追撃効果/奥義・アビリティに追加効果付与(ユイシス(火属性ver), コルル(水着ver))",
         "type": "sumizome_sakura",
         "range": range.own,
         "value": [0.20, 0.20, 0.20]
@@ -2420,6 +2487,13 @@ var supportAbilities = {
         "assign": "set",
         "value": [[2800000, 0.01], [2200000, 0.10], [2000000, 0.70], [1500000, 0.90]]
     },
+    "ougiCapUP_40": {
+        "name": "奥義ダメージ上限UP(シュラ)",
+        "type": "ougiLimitValues",
+        "range": "own",
+        "assign": "set",
+        "value": [[3000000, 0.01], [2400000, 0.10], [2200000, 0.70], [1700000, 0.90]]
+    },
     "ougiLimitValues_dorothyAndClaudia": {
         "name": "奥義ダメージ上限UP&奥義倍率12.5(サーヴァンツ200%奥義時)",
         "type": "composite",
@@ -2488,6 +2562,12 @@ var supportAbilities = {
         "range": range.element.wind,
         "value": 0.30
     },
+    "element_buff_boost_other_own_30": {
+        "name": "風属性攻撃力UPが付与されている時攻撃UP/防御UP",
+        "type": "element_buff_boost_other_own",
+        "range": range.own,
+        "value": 0.30
+    },
     "element_buff_boost_wind_15": {
         "name": "味方全体の強化効果「風属性攻撃UP」の効果15%UP。(コッコロ)",
         "type": "element_buff_boost",
@@ -2531,10 +2611,16 @@ var supportAbilities = {
         "value": [0.0, 0.0, 0.15]
     },
     "element_buff_boost_damageUP_own_10": {
-        "name": "属性攻撃力UPが付与されている時、与ダメージ上昇10%UP。(オリヴィエ)",
-        "type": "element_buff_boost_damageUP_own_10",
+        "name": "属性攻撃力UPが付与されている時、与ダメージ上昇10%UP。",
+        "type": "element_buff_boost_damageUP_own",
         "range": "own",
         "value": 0.10,
+    },
+    "element_buff_boost_damageUP_normal_own_30": {
+        "name": "属性攻撃力UPが付与されている時、与ダメージ上昇30%UP(通常攻撃のみ)。(オリヴィエ)",
+        "type": "element_buff_boost_damageUP_normal_own",
+        "range": "own",
+        "value": 0.30,
     },
     "critical_cap_up_water_3": {
         "name": "水属性キャラがクリティカル発動時にダメージ上限3%UP。(シルヴァ)",
@@ -2546,6 +2632,12 @@ var supportAbilities = {
         "name": "光属性キャラがクリティカル発動時にダメージ上限3%UP。(シルヴァ(光属性ver))",
         "type": "critical_cap_up",
         "range": range.element.light,
+        "value": 0.03,
+    },
+    "critical_cap_up_earth_3": {
+        "name": "土属性キャラがクリティカル発動時にダメージ上限3%UP",
+        "type": "critical_cap_up",
+        "range": range.element.earth,
         "value": 0.03,
     },
     "critical_cap_up_own_10": {
@@ -2648,7 +2740,37 @@ var supportAbilities = {
         "type": "additionalDamageXA",
         "range": range.element.light,
         "value": [0.0, 0.0, 0.1]
-    }
+    },
+    "additional_damage_on_ta_wind_10": {
+        "name": "光属性キャラがトリプルアタック時に光属性追撃効果",
+        "type": "additionalDamageXA",
+        "range": range.element.wind,
+        "value": [0.0, 0.0, 0.1]
+    },
+    "unwavering_conviction": {
+        "name": "自分が瀕死状態の場合、攻防UP/連続攻撃確率UP/奥義性能UP",
+        "type": "unwavering_conviction",
+        "range": "own",
+        "value": 0.0
+    },
+    "sandy_sniper": {
+        "name": "防御力が低いが奥義性能UP/潜伏効果/高揚効果",
+        "type": "sandy_sniper",
+        "range": "own",
+        "value": 0.0
+    },
+    "crazy_auguste": {
+        "name": "パーティの水着・浴衣バージョンのキャラの数に応じて攻撃性能UP",
+        "type": "crazy_auguste",
+        "range": "own",
+        "value": 0.0
+    },
+    "lillie_liebe": {
+        "name": "バトルメンバーにヴィーラがいる場合、自分が必ずトリプルアタック",
+        "type": "lillie_liebe",
+        "range": "own",
+        "value": 0.0
+    },
 };
 
 // exports
@@ -2966,70 +3088,70 @@ module.exports.additionalSelectList = {
     "エクスカリバー": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "ゲイボルグ": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch_all", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "ダマスカスナイフ": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch_all", "elements"],
+        selectKeys: ["main_weapon_switch1", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "カドゥケウス": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "ミョルニル": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "フライクーゲル": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "方天画戟": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch_all", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "ヘラクレス": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "ウルリクムミ": {
         selectKeysNotation: "",
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements"],
+        selectKeys: ["main_weapon_switch2", "elements"],
         selectors: ["mainWeapon", "elements"],
         defaultKeys: [0, "light"],
     },
     "天羽々斬": {
         selectKeysNotation: skillDetailsDescription["slaysnakes_myth"],
         notationText: "",
-        selectKeys: ["main_weapon_switch", "elements", "skill2Detail"],
+        selectKeys: ["main_weapon_switch2", "elements", "skill2Detail"],
         selectors: ["mainWeapon", "elements", "slaysnakes_myth"],
         defaultKeys: [0, "light", "0"],
     },
